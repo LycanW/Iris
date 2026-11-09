@@ -22,7 +22,8 @@ public enum FeatureFlags {
 	SSBO(() -> true, IrisRenderSystem::supportsSSBO),
 	FADE_VARIABLE(() -> true, () -> true),
 	TEXTURE_FILTERING(() -> true, () -> true),
-	UNKNOWN(() -> false, () -> false);
+	UNKNOWN(() -> false, () -> false),
+	SCENE_PASS(() -> true, () -> true);
 
 	private final BooleanSupplier irisRequirement;
 	private final BooleanSupplier hardwareRequirement;

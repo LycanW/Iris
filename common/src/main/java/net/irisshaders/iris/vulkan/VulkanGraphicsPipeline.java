@@ -133,7 +133,7 @@ public class VulkanGraphicsPipeline implements AutoCloseable {
 			var state = world == null ? null : world.pipeline();
 			var raster = VkPipelineRasterizationStateCreateInfo.calloc(stack).sType$Default()
 				.polygonMode(state == null ? VK10.VK_POLYGON_MODE_FILL : VulkanConst.toVk(state.getPolygonMode()))
-				.cullMode(PipelineState.cull(state, world != null && world.shadow()) ? VK10.VK_CULL_MODE_BACK_BIT : VK10.VK_CULL_MODE_NONE)
+				.cullMode((world == null || !world.scene()) && PipelineState.cull(state, world != null && world.shadow()) ? VK10.VK_CULL_MODE_BACK_BIT : VK10.VK_CULL_MODE_NONE)
 				.frontFace(state == null ? VK10.VK_FRONT_FACE_COUNTER_CLOCKWISE : VK10.VK_FRONT_FACE_CLOCKWISE).lineWidth(1.0f);
 			var depthStencil = depthStencil(stack, world, depthFormat);
 			int attachmentDepthFormat = depthFormat;
@@ -553,7 +553,7 @@ public class VulkanGraphicsPipeline implements AutoCloseable {
 		}
 	}
 
-	public record WorldState(RenderPipeline pipeline, int depthFormat, boolean shadow, long zeroVertexBuffer, List<VertexFormat> vertexFormats) {
+	public record WorldState(RenderPipeline pipeline, int depthFormat, boolean shadow, long zeroVertexBuffer, List<VertexFormat> vertexFormats, boolean scene) {
 		public WorldState {
 			vertexFormats = Collections.unmodifiableList(new ArrayList<>(vertexFormats));
 		}

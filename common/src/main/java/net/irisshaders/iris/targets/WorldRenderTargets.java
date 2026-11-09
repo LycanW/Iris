@@ -17,12 +17,17 @@ public class WorldRenderTargets {
 	private final Map<ColorAttachmentPlan, RenderFramebuffer> framebuffers = new IdentityHashMap<>();
 	private final Set<Integer> opaque;
 	private final Set<Integer> translucent;
+	private final Set<Integer> sceneReads;
+	private final Set<Integer> sceneWrites;
 
-	public WorldRenderTargets(RenderTargets targets, Supplier<ShadowRenderTargets> shadows, Set<Integer> opaque, Set<Integer> translucent) {
+	public WorldRenderTargets(RenderTargets targets, Supplier<ShadowRenderTargets> shadows, Set<Integer> opaque, Set<Integer> translucent,
+		Set<Integer> sceneReads, Set<Integer> sceneWrites) {
 		this.targets = targets;
 		this.shadows = shadows;
 		this.opaque = Set.copyOf(opaque);
 		this.translucent = Set.copyOf(translucent);
+		this.sceneReads = Set.copyOf(sceneReads);
+		this.sceneWrites = Set.copyOf(sceneWrites);
 
 		for (Phase phase : Phase.values()) {
 			this.builders.put(phase, new ColorAttachmentPlan.Builder());
@@ -34,6 +39,7 @@ public class WorldRenderTargets {
 			case OPAQUE -> this.opaque;
 			case TRANSLUCENT -> this.translucent;
 			case SHADOW -> Set.of();
+			case SCENE -> this.sceneReads;
 		};
 	}
 
@@ -43,7 +49,7 @@ public class WorldRenderTargets {
 				throw new IllegalStateException("world attachments were sealed before shader discovery finished");
 			}
 
-			this.builders.get(phase).program(name, drawBuffers, this.getFlippedBuffers(phase));
+			this.builders.get(phase).program(name, drawBuffers, phase == Phase.SCENE ? this.sceneWrites : this.getFlippedBuffers(phase));
 		}
 	}
 
@@ -70,12 +76,13 @@ public class WorldRenderTargets {
 
 	private RenderFramebuffer getFramebuffer(Phase phase, ColorAttachmentPlan plan) {
 		return this.framebuffers.computeIfAbsent(plan,
-			p -> phase == Phase.SHADOW ? this.shadows.get().createMergedFramebuffer(p) : this.targets.createMergedFramebuffer(p, true));
+			p -> phase == Phase.SHADOW ? this.shadows.get().createMergedFramebuffer(p) : this.targets.createMergedFramebuffer(p, phase != Phase.SCENE));
 	}
 
 	public enum Phase {
 		OPAQUE,
 		TRANSLUCENT,
-		SHADOW
+		SHADOW,
+		SCENE
 	}
 }

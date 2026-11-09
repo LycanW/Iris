@@ -2,10 +2,12 @@ package net.irisshaders.iris.compat.sodium.mixin;
 
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
 import net.caffeinemc.mods.sodium.client.gpu.device.batch.MultiDrawBatch;
+import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionFlags;
 import net.caffeinemc.mods.sodium.client.render.chunk.lists.ChunkRenderList;
 import net.caffeinemc.mods.sodium.client.render.chunk.region.RenderRegion;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.irisshaders.iris.mixinterface.ShadowRenderRegion;
+import net.irisshaders.iris.mixinterface.SceneRenderRegion;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -19,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Map;
 
 @Mixin(RenderRegion.class)
-public class MixinRenderRegion implements ShadowRenderRegion {
+public class MixinRenderRegion implements ShadowRenderRegion, SceneRenderRegion {
 	@Unique
 	ChunkRenderList regularRenderList;
 	@Unique
@@ -38,6 +40,58 @@ public class MixinRenderRegion implements ShadowRenderRegion {
 	private Map<TerrainRenderPass, MultiDrawBatch> cachedBatches;
 	@Unique
 	private boolean iris$shadowRenderListActive;
+	@Unique
+	private ChunkRenderList iris$sceneRenderList;
+	@Unique
+	private ChunkRenderList iris$beforeSceneRenderList;
+	@Unique
+	private Map<TerrainRenderPass, MultiDrawBatch> iris$sceneCachedBatches;
+	@Unique
+	private Map<TerrainRenderPass, MultiDrawBatch> iris$beforeSceneCachedBatches;
+
+	@Override
+	public ChunkRenderList iris$beginSceneRenderListScope(int frame) {
+		RenderRegion region = (RenderRegion) (Object) this;
+		if (this.iris$sceneRenderList == null) {
+			this.iris$sceneRenderList = new ChunkRenderList(region);
+			this.iris$sceneCachedBatches = new Reference2ReferenceOpenHashMap<>();
+		}
+
+		this.iris$beforeSceneRenderList = this.renderList;
+		this.renderList = this.iris$sceneRenderList;
+		this.iris$beforeSceneCachedBatches = this.cachedBatches;
+		this.cachedBatches = this.iris$sceneCachedBatches;
+		this.iris$sceneCachedBatches = null;
+
+		this.renderList.reset(frame);
+		for (int section = 0; section < RenderRegion.REGION_SIZE; section++) {
+			if ((region.getSectionFlags(section) & RenderSectionFlags.MASK_HAS_BLOCK_GEOMETRY) != 0) {
+				this.renderList.add(section);
+			}
+		}
+		return this.renderList;
+	}
+
+	@Override
+	public void iris$endSceneRenderListScope() {
+		this.iris$sceneRenderList = this.renderList;
+		this.renderList = this.iris$beforeSceneRenderList;
+		this.iris$sceneCachedBatches = this.cachedBatches;
+		this.cachedBatches = this.iris$beforeSceneCachedBatches;
+		this.iris$beforeSceneRenderList = null;
+		this.iris$beforeSceneCachedBatches = null;
+	}
+
+	@Override
+	public void iris$destroySceneRenderList() {
+		if (this.iris$sceneCachedBatches != null) {
+			for (MultiDrawBatch batch : this.iris$sceneCachedBatches.values()) {
+				batch.delete();
+			}
+			this.iris$sceneCachedBatches = null;
+		}
+		this.iris$sceneRenderList = null;
+	}
 
 	@Unique
 	@Override
@@ -84,6 +138,12 @@ public class MixinRenderRegion implements ShadowRenderRegion {
 
 	@Inject(method = "delete", at = @At("HEAD"))
 	private void iris$delete(CallbackInfo ci) {
+		this.iris$destroySceneRenderList();
+		if (this.iris$beforeSceneCachedBatches != null) {
+			for (MultiDrawBatch batch : this.iris$beforeSceneCachedBatches.values()) {
+				batch.delete();
+			}
+		}
 		if (this.regularCachedBatches != null) {
 			for (MultiDrawBatch batch : this.regularCachedBatches.values()) {
 				batch.delete();
@@ -99,6 +159,16 @@ public class MixinRenderRegion implements ShadowRenderRegion {
 
 	@Override
 	public void iris$forceClearAllBatches() {
+		if (this.iris$sceneCachedBatches != null) {
+			for (MultiDrawBatch batch : this.iris$sceneCachedBatches.values()) {
+				batch.clear();
+			}
+		}
+		if (this.iris$beforeSceneCachedBatches != null) {
+			for (MultiDrawBatch batch : this.iris$beforeSceneCachedBatches.values()) {
+				batch.clear();
+			}
+		}
 		if (this.regularCachedBatches != null) {
 			for (MultiDrawBatch batch : this.regularCachedBatches.values()) {
 				batch.clear();
@@ -120,6 +190,18 @@ public class MixinRenderRegion implements ShadowRenderRegion {
 
 	@Override
 	public void iris$forceClearBatchFor(TerrainRenderPass pass) {
+		if (this.iris$sceneCachedBatches != null) {
+			MultiDrawBatch batch = this.iris$sceneCachedBatches.get(pass);
+			if (batch != null) {
+				batch.clear();
+			}
+		}
+		if (this.iris$beforeSceneCachedBatches != null) {
+			MultiDrawBatch batch = this.iris$beforeSceneCachedBatches.get(pass);
+			if (batch != null) {
+				batch.clear();
+			}
+		}
 		if (this.regularCachedBatches != null) {
 			MultiDrawBatch batch = this.regularCachedBatches.get(pass);
 			if (batch != null) {

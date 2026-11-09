@@ -101,7 +101,8 @@ public class VulkanGraphicsShader implements GraphicsShader {
 			.map(a -> new VulkanGraphicsPipeline.Attribute(a.location(), a.binding(), VulkanConst.toVk(a.format()), a.offset())).toList();
 		var world = state.vanillaPipeline() == null ? null : new VulkanGraphicsPipeline.WorldState(state.vanillaPipeline(),
 			state.depthFormat() == null ? VK10.VK_FORMAT_UNDEFINED : VulkanConst.toVk(state.depthFormat()), state.shadowPass(),
-			state.zeroVertexBuffer() == null ? 0 : ((VulkanGpuBuffer) state.zeroVertexBuffer()).vkBuffer(), state.vertexFormats()); // stupid validation layer warning...
+			state.zeroVertexBuffer() == null ? 0 : ((VulkanGpuBuffer) state.zeroVertexBuffer()).vkBuffer(), state.vertexFormats(),
+			state.scenePass()); // stupid validation layer warning...
 		var device = VulkanCommandBridge.getDevice().vkDevice();
 		var heap = this.pack.getSamplerHeap();
 		var library = this.library;

@@ -9,6 +9,7 @@ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.irisshaders.iris.Iris;
+import net.irisshaders.iris.features.FeatureFlags;
 import net.irisshaders.iris.gl.IrisRenderSystem;
 import net.irisshaders.iris.gl.blending.AlphaTest;
 import net.irisshaders.iris.gl.blending.AlphaTestFunction;
@@ -150,6 +151,17 @@ public class ShaderProperties {
 		} catch (IOException e) {
 			Iris.logger.error("Error loading shaders.properties!", e);
 		}
+
+		// Feature declarations retain their original, unpreprocessed semantics,
+		// and must be known before recognizing feature-specific texture stages.
+		original.forEach((keyObject, valueObject) -> {
+			String key = (String) keyObject;
+			String value = (String) valueObject;
+			handleWhitespacedListDirective(key, value, "iris.features.required", options -> requiredFeatureFlags = options);
+			handleWhitespacedListDirective(key, value, "iris.features.optional", options -> optionalFeatureFlags = options);
+		});
+		boolean scenePass = requiredFeatureFlags.stream().anyMatch(flag -> FeatureFlags.getValue(flag) == FeatureFlags.SCENE_PASS)
+			|| optionalFeatureFlags.stream().anyMatch(flag -> FeatureFlags.getValue(flag) == FeatureFlags.SCENE_PASS);
 
 		preprocessed.forEach((keyObject, valueObject) -> {
 			String key = (String) keyObject;
@@ -456,7 +468,8 @@ public class ShaderProperties {
 				// TODO: Is there a better way to achieve this?
 				samplerName = samplerName.split("\\.")[0];
 
-				Optional<TextureStage> optionalTextureStage = TextureStage.parse(stageName);
+				Optional<TextureStage> optionalTextureStage = TextureStage.parse(stageName)
+					.filter(stage -> scenePass || (stage != TextureStage.SCENE && stage != TextureStage.SCENECOMP));
 
 				if (optionalTextureStage.isEmpty()) {
 					Iris.logger.warn("Unknown texture stage " + "\"" + stageName + "\"," + " ignoring custom texture directive for " + key);
@@ -646,9 +659,6 @@ public class ShaderProperties {
 		original.forEach((keyObject, valueObject) -> {
 			String key = (String) keyObject;
 			String value = (String) valueObject;
-
-			handleWhitespacedListDirective(key, value, "iris.features.required", options -> requiredFeatureFlags = options);
-			handleWhitespacedListDirective(key, value, "iris.features.optional", options -> optionalFeatureFlags = options);
 
 			// Defining "sliders" multiple times in the properties file will only result in
 			// the last definition being used, should be tested if behavior matches OptiFine

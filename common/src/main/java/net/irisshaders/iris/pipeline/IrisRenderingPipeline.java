@@ -111,6 +111,7 @@ import org.joml.Vector4f;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -135,6 +136,9 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 	private final Supplier<ShadowRenderTargets> shadowTargetsSupplier;
 	private final Set<ExtendedShader> loadedShaders;
 	private final CompositeRenderer beginRenderer;
+	private final CompositeRenderer scenePreparationRenderer;
+	private final SceneRenderer sceneRenderer;
+	private final CompositeRenderer sceneCompositeRenderer;
 	private final CompositeRenderer prepareRenderer;
 	private final CompositeRenderer deferredRenderer;
 	private final CompositeRenderer compositeRenderer;
@@ -351,6 +355,28 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 				programSet.getPackDirectives().getExplicitFlips("begin_pre"), this.customUniforms);
 			cleanup.add(this.beginRenderer::destroy);
 
+			this.scenePreparationRenderer = programSet.getSceneCompute().length == 0 ? null :
+				this.createSceneComposite(programSet, new ProgramSource[1], new ComputeSource[][]{programSet.getSceneCompute()},
+					flipper, TextureStage.SCENE, CompositePass.SCENE, "scene_pre");
+			if (this.scenePreparationRenderer != null) {
+				cleanup.add(this.scenePreparationRenderer::destroy);
+			}
+
+			this.sceneRenderer = programSet.get(ProgramId.Scene).map(source -> new SceneRenderer(source, this.renderTargets, flipper))
+				.orElse(null);
+			if (this.sceneRenderer != null) {
+				cleanup.add(this.sceneRenderer::destroy);
+			}
+
+			boolean hasSceneComposite = Arrays.stream(programSet.getComposite(ProgramArrayId.SceneComposite))
+				.anyMatch(source -> source != null && source.isValid()) || programSet.getCompute(ProgramArrayId.SceneComposite).length > 0;
+			this.sceneCompositeRenderer = hasSceneComposite ? this.createSceneComposite(programSet,
+				programSet.getComposite(ProgramArrayId.SceneComposite), programSet.getCompute(ProgramArrayId.SceneComposite),
+				flipper, TextureStage.SCENECOMP, CompositePass.SCENECOMP, "scenecomp_pre") : null;
+			if (this.sceneCompositeRenderer != null) {
+				cleanup.add(this.sceneCompositeRenderer::destroy);
+			}
+
 			this.flippedBeforeShadow = flipper.snapshot();
 			this.mipmapsBeforeShadow = this.renderTargets.plannedMipmaps();
 			this.shadowComputes = this.createShadowComputes(programSet.getShadowCompute(), programSet);
@@ -402,11 +428,14 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 			this.loadedShaders = new HashSet<>();
 			cleanup.add(this::destroyShaders);
 			this.worldTargets = new WorldRenderTargets(this.renderTargets, this.shadowTargetsSupplier, this.flippedAfterPrepare,
-				this.flippedAfterTranslucent);
+				this.flippedAfterTranslucent, this.sceneRenderer == null ? Set.of() : this.sceneRenderer.getReadsFromAlt(),
+				this.sceneRenderer == null ? Set.of() : this.sceneRenderer.getWritesToAlt());
 
 			ShaderLoadingMap loadingMap = new ShaderLoadingMap((key, patchType) -> {
 				try {
-					if (key.isShadow()) {
+					if (key.isScene()) {
+						return this.sceneRenderer == null ? null : this.createShader(key.getName(), programSet.get(ProgramId.Scene), key, patchType);
+					} else if (key.isShadow()) {
 						return this.createShadowShader(key.getName(), this.resolver.resolve(key.getProgram()), key, patchType);
 					} else {
 						return this.createShader(key.getName(), this.resolver.resolve(key.getProgram()), key, patchType);
@@ -532,6 +561,8 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 				this.loadedShaders.forEach(ExtendedShader::prepare);
 				IrisPipelines.preparePrograms(this, this.shaderMap);
 				this.beginRenderer.prepare();
+				if (this.scenePreparationRenderer != null) this.scenePreparationRenderer.prepare();
+				if (this.sceneCompositeRenderer != null) this.sceneCompositeRenderer.prepare();
 				this.prepareRenderer.prepare();
 				this.deferredRenderer.prepare();
 				this.compositeRenderer.prepare();
@@ -573,6 +604,15 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 				program.close();
 			}
 		}
+	}
+
+	private CompositeRenderer createSceneComposite(ProgramSet programSet, ProgramSource[] sources, ComputeSource[][] computes,
+		BufferFlipper flipper, TextureStage stage, CompositePass pass, String preFlips) {
+		return new CompositeRenderer(this, pass, programSet.getPackDirectives(), sources, computes, this.renderTargets,
+			this.shaderStorageBufferHolder, this.customTextureManager.getNoiseTexture(), this.updateNotifier, this.centerDepthSampler,
+			flipper, this.shadowTargetsSupplier, stage, this.customTextureManager.getCustomTextureIdMap(stage),
+			this.customTextureManager.getIrisCustomTextures(), this.customImages, programSet.getPackDirectives().getExplicitFlips(preFlips),
+			this.customUniforms);
 	}
 
 	public GpuSampler normalNativeSampler() {
@@ -786,15 +826,16 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 
 	public void addGbufferOrShadowSamplers(SamplerHolder samplers, ImageHolder images, Supplier<ImmutableSet<Integer>> flipped,
 		boolean isShadowPass, boolean hasTexture, boolean hasLightmap, boolean hasOverlay, WorldRenderTargets.Phase phase) {
-		TextureStage textureStage = TextureStage.GBUFFERS_AND_SHADOW;
+		TextureStage textureStage = phase == WorldRenderTargets.Phase.SCENE ? TextureStage.SCENE : TextureStage.GBUFFERS_AND_SHADOW;
 
 		CustomTextureSamplerInterceptor samplerHolder = new CustomTextureSamplerInterceptor(samplers,
 			customTextureManager.getCustomTextureIdMap().getOrDefault(textureStage, Object2ObjectMaps.emptyMap()));
 
-		IrisSamplers.addRenderTargetSamplers(samplerHolder, flipped, renderTargets, false, this, switch (phase) {
+		IrisSamplers.addRenderTargetSamplers(samplerHolder, flipped, renderTargets, phase == WorldRenderTargets.Phase.SCENE, this, switch (phase) {
 			case SHADOW -> this.mipmapsBeforeShadow;
 			case OPAQUE -> this.mipmapsAfterPrepare;
 			case TRANSLUCENT -> this.mipmapsAfterTranslucent;
+			case SCENE -> this.sceneRenderer.getMipmaps();
 		});
 		IrisSamplers.addCustomTextures(samplerHolder, customTextureManager.getIrisCustomTextures());
 		IrisImages.addRenderTargetImages(images, flipped, renderTargets);
@@ -952,37 +993,8 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 
 		this.clearImages.forEach(CustomImage::clear);
 
-		if (shadowRenderTargets != null) {
-			if (packDirectives.getShadowDirectives().isShadowEnabled() == OptionalBoolean.FALSE) {
-				if (shadowRenderTargets.isFullClearRequired()) {
-					this.shadowClearPasses = ClearPassCreator.createShadowClearPasses(shadowRenderTargets, false, shadowDirectives);
-					this.shadowClearPassesFull = ClearPassCreator.createShadowClearPasses(shadowRenderTargets, true, shadowDirectives);
-					shadowRenderTargets.onFullClear();
-					ClearPass.executeAll(shadowClearPassesFull, emptyClearColor);
-				}
-			} else {
-
-				RenderSystem.getDevice().createCommandEncoder().clearDepthTexture(this.shadowRenderTargets.getDepthTexture(), 1.0f);
-
-				ImmutableList<ClearPass> passes;
-
-				for (ComputeProgram computeProgram : shadowComputes) {
-					if (computeProgram != null) {
-						computeProgram.dispatch(shadowMapResolution, shadowMapResolution);
-					}
-				}
-
-				if (shadowRenderTargets.isFullClearRequired()) {
-					this.shadowClearPasses = ClearPassCreator.createShadowClearPasses(shadowRenderTargets, false, shadowDirectives);
-					this.shadowClearPassesFull = ClearPassCreator.createShadowClearPasses(shadowRenderTargets, true, shadowDirectives);
-					passes = shadowClearPassesFull;
-					shadowRenderTargets.onFullClear();
-				} else {
-					passes = shadowClearPasses;
-				}
-
-				ClearPass.executeAll(passes, emptyClearColor);
-			}
+		if (!this.hasSceneStage()) {
+			this.prepareShadowTargets(emptyClearColor);
 		}
 
 		RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
@@ -995,6 +1007,9 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 
 		if (changed) {
 			beginRenderer.recalculateSizes();
+			if (this.scenePreparationRenderer != null) this.scenePreparationRenderer.recalculateSizes();
+			if (this.sceneCompositeRenderer != null) this.sceneCompositeRenderer.recalculateSizes();
+			if (this.sceneRenderer != null) this.worldTargets.getFramebuffer(WorldRenderTargets.Phase.SCENE).validateAttachments();
 			prepareRenderer.recalculateSizes();
 			deferredRenderer.recalculateSizes();
 			compositeRenderer.recalculateSizes();
@@ -1049,8 +1064,55 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 		isBeforeTranslucent = true;
 	}
 
+	private boolean hasSceneStage() {
+		return this.scenePreparationRenderer != null || this.sceneRenderer != null || this.sceneCompositeRenderer != null;
+	}
+
+	private void prepareShadowTargets(Vector4f emptyClearColor) {
+		if (shadowRenderTargets != null) {
+			if (packDirectives.getShadowDirectives().isShadowEnabled() == OptionalBoolean.FALSE) {
+				if (shadowRenderTargets.isFullClearRequired()) {
+					this.shadowClearPasses = ClearPassCreator.createShadowClearPasses(shadowRenderTargets, false, shadowDirectives);
+					this.shadowClearPassesFull = ClearPassCreator.createShadowClearPasses(shadowRenderTargets, true, shadowDirectives);
+					shadowRenderTargets.onFullClear();
+					ClearPass.executeAll(shadowClearPassesFull, emptyClearColor);
+				}
+			} else {
+
+				RenderSystem.getDevice().createCommandEncoder().clearDepthTexture(this.shadowRenderTargets.getDepthTexture(), 1.0f);
+
+				ImmutableList<ClearPass> passes;
+
+				for (ComputeProgram computeProgram : shadowComputes) {
+					if (computeProgram != null) {
+						computeProgram.dispatch(shadowMapResolution, shadowMapResolution);
+					}
+				}
+
+				if (shadowRenderTargets.isFullClearRequired()) {
+					this.shadowClearPasses = ClearPassCreator.createShadowClearPasses(shadowRenderTargets, false, shadowDirectives);
+					this.shadowClearPassesFull = ClearPassCreator.createShadowClearPasses(shadowRenderTargets, true, shadowDirectives);
+					passes = shadowClearPassesFull;
+					shadowRenderTargets.onFullClear();
+				} else {
+					passes = shadowClearPasses;
+				}
+
+				ClearPass.executeAll(passes, emptyClearColor);
+			}
+		}
+
+	}
+
 	@Override
 	public void renderShadows(LevelRendererAccessor worldRenderer, Camera playerCamera, CameraRenderState renderState) {
+		if (this.scenePreparationRenderer != null) this.scenePreparationRenderer.renderAll();
+		if (this.sceneRenderer != null) this.sceneRenderer.render(worldRenderer, playerCamera);
+		if (this.sceneCompositeRenderer != null) this.sceneCompositeRenderer.renderAll();
+		if (this.hasSceneStage()) {
+			this.prepareShadowTargets(new Vector4f(1.0F));
+		}
+
 		if (shadowRenderer != null) {
 			this.shadowRenderer.renderShadows(worldRenderer, playerCamera, renderState);
 		}
@@ -1212,6 +1274,7 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 	}
 
 	public WorldRenderTargets.Phase getWorldTargetPhase() {
+		if (SceneRenderingState.isRendering()) return WorldRenderTargets.Phase.SCENE;
 		return ShadowRenderingState.areShadowsCurrentlyBeingRendered() ? WorldRenderTargets.Phase.SHADOW : this.isBeforeTranslucent ? WorldRenderTargets.Phase.OPAQUE : WorldRenderTargets.Phase.TRANSLUCENT;
 	}
 
@@ -1250,6 +1313,9 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 		}
 
 		this.beginRenderer.destroy();
+		if (this.scenePreparationRenderer != null) this.scenePreparationRenderer.destroy();
+		if (this.sceneRenderer != null) this.sceneRenderer.destroy();
+		if (this.sceneCompositeRenderer != null) this.sceneCompositeRenderer.destroy();
 		prepareRenderer.destroy();
 		compositeRenderer.destroy();
 		deferredRenderer.destroy();

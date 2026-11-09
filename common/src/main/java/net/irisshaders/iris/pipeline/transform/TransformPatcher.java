@@ -385,8 +385,15 @@ public class TransformPatcher {
 	public static Map<PatchShaderType, String> patchSodium(String name, String vertex, String geometry, String tessControl, String tessEval,
 		String fragment, AlphaTest alpha, Object2ObjectMap<Tri<String, TextureType, TextureStage>, String> textureMap,
 		Set<String> textureOverrides, boolean shadow) {
+		return patchSodium(name, vertex, geometry, tessControl, tessEval, fragment, alpha, textureMap, textureOverrides, shadow,
+			TextureStage.GBUFFERS_AND_SHADOW);
+	}
+
+	public static Map<PatchShaderType, String> patchSodium(String name, String vertex, String geometry, String tessControl, String tessEval,
+		String fragment, AlphaTest alpha, Object2ObjectMap<Tri<String, TextureType, TextureStage>, String> textureMap,
+		Set<String> textureOverrides, boolean shadow, TextureStage textureStage) {
 		return transform(name, vertex, geometry, tessControl, tessEval, fragment,
-			new SodiumParameters(Patch.SODIUM, textureMap, textureOverrides, alpha, shadow));
+			new SodiumParameters(Patch.SODIUM, textureMap, textureOverrides, alpha, shadow, textureStage));
 	}
 
 	public static Map<PatchShaderType, String> patchComposite(String name, String vertex, String geometry, String fragment,

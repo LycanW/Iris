@@ -81,7 +81,7 @@ public class GlGraphicsShader implements GraphicsShader {
 			this.state = state;
 			this.vertexFormats = state.vertexFormats();
 			this.depth = state.depthState();
-			this.cull = PipelineState.cull(state.vanillaPipeline(), state.shadowPass());
+			this.cull = state.cull();
 			this.polygonMode = state.vanillaPipeline() == null ? GL11C.GL_FILL : GlConst.toGl(state.vanillaPipeline().getPolygonMode());
 			this.topology = GlGraphicsShader.this.shader.source.sources().containsKey(
 				PatchShaderType.TESS_CONTROL) ? GL40C.GL_PATCHES : state.vanillaPipeline() == null ? GL11C.GL_TRIANGLES : GlConst.toGl(

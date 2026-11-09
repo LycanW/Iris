@@ -40,12 +40,13 @@ public class ShaderCreator {
 			vertexFormat = WorldRenderingSettings.INSTANCE.getVertexFormat().getVertexFormat();
 		}
 		Map<PatchShaderType, String> transformed;
+		TextureStage textureStage = shaderKey.isScene() ? TextureStage.SCENE : TextureStage.GBUFFERS_AND_SHADOW;
 
 		if (patch == Patch.SODIUM) {
 			transformed = TransformPatcher.patchSodium(name, source.getVertexSource().orElseThrow(RuntimeException::new),
 				source.getGeometrySource().orElse(null), source.getTessControlSource().orElse(null),
 				source.getTessEvalSource().orElse(null), source.getFragmentSource().orElseThrow(RuntimeException::new), alpha,
-				pipeline.getTextureMap(), pipeline.getTextureOverrides(TextureStage.GBUFFERS_AND_SHADOW), false);
+				pipeline.getTextureMap(), pipeline.getTextureOverrides(textureStage), false, textureStage);
 		} else {
 			transformed = TransformPatcher.patchVanilla(name, source.getVertexSource().orElseThrow(RuntimeException::new),
 				source.getGeometrySource().orElse(null), source.getTessControlSource().orElse(null),

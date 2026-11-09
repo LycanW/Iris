@@ -58,6 +58,7 @@ public enum ProgramId {
 	DhShadow(ProgramGroup.Dh, "shadow"),
 
 	Final(ProgramGroup.Final, ""),
+	Scene(ProgramGroup.Scene, "", BlendModeOverride.OFF),
 	;
 
 	private final ProgramGroup group;

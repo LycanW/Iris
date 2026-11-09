@@ -4,5 +4,7 @@ public enum CompositePass {
 	BEGIN,
 	PREPARE,
 	DEFERRED,
-	COMPOSITE
+	COMPOSITE,
+	SCENE,
+	SCENECOMP
 }

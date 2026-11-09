@@ -159,6 +159,8 @@ public enum ShaderKey {
 	SHADOW_SODIUM_TERRAIN_TRANSLUCENT(ProgramId.ShadowWater, AlphaTests.ONE_TENTH_ALPHA, null, FogMode.PER_VERTEX, LightingModel.LIGHTMAP,
 		Patch.SODIUM),
 
+	SCENE_SODIUM_TERRAIN(ProgramId.Scene, AlphaTests.OFF, null, FogMode.PER_VERTEX, LightingModel.LIGHTMAP, Patch.SODIUM),
+
 	// Note: These must be at the very end (NewWorldRenderingPipeline implementation details)
 	SHADOW_TERRAIN_CUTOUT(ProgramId.ShadowCutout, AlphaTests.ONE_TENTH_ALPHA, IrisVertexFormats.TERRAIN, FogMode.OFF,
 		LightingModel.LIGHTMAP, Patch.VANILLA),
@@ -290,7 +292,15 @@ public enum ShaderKey {
 		return this.getProgram() == ProgramId.Shadow || this.getProgram() == ProgramId.ShadowCutout || this.getProgram() == ProgramId.ShadowWater || this.getProgram() == ProgramId.ShadowSolid || this.getProgram() == ProgramId.ShadowEntities || this.getProgram() == ProgramId.ShadowLightning || this.getProgram() == ProgramId.ShadowBlock;
 	}
 
+	public boolean isScene() {
+		return this.getProgram() == ProgramId.Scene;
+	}
+
 	public List<WorldRenderTargets.Phase> getRenderPhases() {
+		if (this.isScene()) {
+			return List.of(WorldRenderTargets.Phase.SCENE);
+		}
+
 		if (this.isShadow()) {
 			return List.of(WorldRenderTargets.Phase.SHADOW);
 		}

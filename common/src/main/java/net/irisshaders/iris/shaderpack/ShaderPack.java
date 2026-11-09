@@ -165,8 +165,7 @@ public class ShaderPack {
 		this.languageMap = new LanguageMap(root.resolve("lang"));
 
 		// Discover, merge, and apply shader pack options
-		this.shaderPackOptions = new ShaderPackOptions(graph, changedConfigs);
-		graph = this.shaderPackOptions.getIncludes();
+		ShaderPackOptions options = new ShaderPackOptions(graph, changedConfigs);
 
 		List<StringPair> finalEnvironmentDefines = new ArrayList<>(List.copyOf(environmentDefines));
 		for (FeatureFlags flag : FeatureFlags.values()) {
@@ -174,8 +173,39 @@ public class ShaderPack {
 				finalEnvironmentDefines.add(new StringPair("IRIS_FEATURE_" + flag.name(), ""));
 			}
 		}
-		this.shaderProperties = loadProperties(root, "shaders.properties").map(
-			source -> new ShaderProperties(source, shaderPackOptions, finalEnvironmentDefines)).orElseGet(ShaderProperties::empty);
+		String propertiesSource = loadProperties(root, "shaders.properties").orElse(null);
+		ShaderProperties properties = propertiesSource == null ? ShaderProperties.empty()
+			: new ShaderProperties(propertiesSource, options, finalEnvironmentDefines);
+
+		// Keep legacy source roots and option discovery unchanged unless the pack
+		// declares the new stage. Use the same properties/option parser for both.
+		boolean readScene = properties.getRequiredFeatureFlags().stream().anyMatch(flag -> FeatureFlags.getValue(flag) == FeatureFlags.SCENE_PASS)
+			|| properties.getOptionalFeatureFlags().stream().anyMatch(flag -> FeatureFlags.getValue(flag) == FeatureFlags.SCENE_PASS);
+		if (readScene) {
+			boolean foundScene = ShaderPackSourceNames.findPresentSources(starts, root, AbsolutePackPath.fromAbsolutePath("/"),
+				ShaderPackSourceNames.SCENE_STARTS);
+			for (String id : dimensionIdCreator) {
+				if (ShaderPackSourceNames.findPresentSources(starts, root, AbsolutePackPath.fromAbsolutePath("/" + id),
+					ShaderPackSourceNames.SCENE_STARTS)) {
+					foundScene = true;
+					if (!dimensionIds.contains(id)) {
+						dimensionIds.add(id);
+					}
+				}
+			}
+			if (foundScene) {
+				graph = new IncludeGraph(root, starts.build(), isZip);
+				if (!graph.getFailures().isEmpty()) {
+					throw new IOException(
+						String.join("\n", graph.getFailures().values().stream().map(RusticError::toString).toArray(String[]::new)));
+				}
+				options = new ShaderPackOptions(graph, changedConfigs);
+				properties = new ShaderProperties(propertiesSource, options, finalEnvironmentDefines);
+			}
+		}
+		this.shaderPackOptions = options;
+		this.shaderProperties = properties;
+		graph = this.shaderPackOptions.getIncludes();
 
 		for (Int2ObjectMap.Entry<ShaderStorageInfo> shaderStorageInfoEntry : shaderProperties.getBufferObjects().int2ObjectEntrySet()) {
 			ShaderStorageInfo info = shaderStorageInfoEntry.getValue();

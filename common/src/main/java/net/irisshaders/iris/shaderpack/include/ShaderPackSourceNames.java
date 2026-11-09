@@ -15,7 +15,8 @@ import java.util.stream.Stream;
  * Enumerates the possible program source file names to
  */
 public class ShaderPackSourceNames {
-	public static final ImmutableList<String> POTENTIAL_STARTS = findPotentialStarts();
+	public static final ImmutableList<String> POTENTIAL_STARTS = findPotentialStarts(false);
+	public static final ImmutableList<String> SCENE_STARTS = findPotentialStarts(true);
 
 	public static boolean findPresentSources(ImmutableList.Builder<AbsolutePackPath> starts, Path packRoot, AbsolutePackPath directory,
 		ImmutableList<String> candidates) throws IOException {
@@ -42,11 +43,14 @@ public class ShaderPackSourceNames {
 		return anyFound;
 	}
 
-	private static ImmutableList<String> findPotentialStarts() {
+	private static ImmutableList<String> findPotentialStarts(boolean scene) {
 		ImmutableList.Builder<String> potentialFileNames = ImmutableList.builder();
 
 		// TODO: Iterate over program groups for exact iteration order.
 		for (ProgramArrayId programArrayId : ProgramArrayId.values()) {
+			if ((programArrayId == ProgramArrayId.SceneComposite) != scene) {
+				continue;
+			}
 			for (int i = 0; i < programArrayId.getNumPrograms(); i++) {
 				String name = programArrayId.getSourcePrefix();
 				String suffix = "";
@@ -60,7 +64,10 @@ public class ShaderPackSourceNames {
 		}
 
 		for (ProgramId programId : ProgramId.values()) {
-			if (programId == ProgramId.Final || programId == ProgramId.Shadow) {
+			if ((programId == ProgramId.Scene) != scene) {
+				continue;
+			}
+			if (programId == ProgramId.Final || programId == ProgramId.Shadow || programId == ProgramId.Scene) {
 				addComputeStarts(potentialFileNames, programId.getSourceName());
 			} else {
 				addStarts(potentialFileNames, programId.getSourceName());

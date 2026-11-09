@@ -7,6 +7,7 @@ public enum ProgramArrayId {
 	Prepare(ProgramGroup.Prepare, 100),
 	Deferred(ProgramGroup.Deferred, 100),
 	Composite(ProgramGroup.Composite, 100),
+	SceneComposite(ProgramGroup.SceneComposite, 100),
 	;
 
 	private final ProgramGroup group;

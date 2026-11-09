@@ -14,6 +14,7 @@ import net.caffeinemc.mods.sodium.client.render.chunk.terrain.DefaultTerrainRend
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
 import net.irisshaders.iris.Iris;
+import net.irisshaders.iris.pipeline.SceneRenderingState;
 import net.irisshaders.iris.shadows.ShadowRenderingState;
 import net.minecraft.client.renderer.oit.OitStage;
 import org.spongepowered.asm.mixin.Final;
@@ -27,18 +28,26 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public class MixinDefaultChunkRenderer {
 	@Unique
 	private final boolean[] shouldDrawShadow = new boolean[DefaultTerrainRenderPasses.ALL.length];
+	@Unique
+	private boolean[] iris$shouldDrawScene;
 	@Shadow
 	@Final
 	private boolean[] shouldDraw;
 
 	@Redirect(method = {"prepare", "render"}, at = @At(value = "FIELD", target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/DefaultChunkRenderer;shouldDraw:[Z"))
 	private boolean[] change(DefaultChunkRenderer instance) {
+		if (SceneRenderingState.isRendering()) {
+			if (this.iris$shouldDrawScene == null) {
+				this.iris$shouldDrawScene = new boolean[DefaultTerrainRenderPasses.ALL.length];
+			}
+			return this.iris$shouldDrawScene;
+		}
 		return ShadowRenderingState.areShadowsCurrentlyBeingRendered() ? this.shouldDrawShadow : this.shouldDraw;
 	}
 
 	@Redirect(method = "prepare", at = @At(value = "FIELD", target = "Lnet/caffeinemc/mods/sodium/client/gui/SodiumOptions$PerformanceSettings;useBlockFaceCulling:Z"), remap = false)
 	private boolean iris$disableBlockFaceCullingInShadowPass(SodiumOptions.PerformanceSettings instance) {
-		if (ShadowRenderingState.areShadowsCurrentlyBeingRendered())
+		if (ShadowRenderingState.areShadowsCurrentlyBeingRendered() || SceneRenderingState.isRendering())
 			return false;
 		return instance.useBlockFaceCulling;
 	}

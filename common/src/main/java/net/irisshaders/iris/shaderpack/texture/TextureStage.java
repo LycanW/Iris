@@ -38,7 +38,15 @@ public enum TextureStage {
 	/**
 	 * The composite pass and final pass.
 	 */
-	COMPOSITE_AND_FINAL;
+	COMPOSITE_AND_FINAL,
+	/**
+	 * The scene geometry program and its preceding compute programs.
+	 */
+	SCENE,
+	/**
+	 * The composite programs following scene geometry.
+	 */
+	SCENECOMP;
 
 	public static Optional<TextureStage> parse(String name) {
 		return switch (name) {
@@ -49,6 +57,8 @@ public enum TextureStage {
 			case "gbuffers" -> Optional.of(GBUFFERS_AND_SHADOW);
 			case "deferred" -> Optional.of(DEFERRED);
 			case "composite" -> Optional.of(COMPOSITE_AND_FINAL);
+			case "scene" -> Optional.of(SCENE);
+			case "scenecomp" -> Optional.of(SCENECOMP);
 			default -> Optional.empty();
 		};
 	}

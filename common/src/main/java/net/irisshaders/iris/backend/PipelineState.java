@@ -13,7 +13,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-public record PipelineState(FramebufferDescription framebuffer, List<BlendMode> blendModes, List<Attribute> vertexAttributes, int vertexStride, RenderPipeline vanillaPipeline, boolean shadowPass, GpuBuffer zeroVertexBuffer, List<VertexFormat> vertexFormats, List<Integer> outputLocations) {
+public record PipelineState(FramebufferDescription framebuffer, List<BlendMode> blendModes, List<Attribute> vertexAttributes, int vertexStride, RenderPipeline vanillaPipeline, boolean shadowPass, GpuBuffer zeroVertexBuffer, List<VertexFormat> vertexFormats, List<Integer> outputLocations, boolean scenePass) {
+	public PipelineState(FramebufferDescription framebuffer, List<BlendMode> blendModes, List<Attribute> vertexAttributes, int vertexStride,
+		RenderPipeline vanillaPipeline, boolean shadowPass, GpuBuffer zeroVertexBuffer, List<VertexFormat> vertexFormats,
+		List<Integer> outputLocations) {
+		this(framebuffer, blendModes, vertexAttributes, vertexStride, vanillaPipeline, shadowPass, zeroVertexBuffer, vertexFormats,
+			outputLocations, false);
+	}
+
 	public PipelineState(FramebufferDescription framebuffer, List<BlendMode> blendModes, List<Attribute> vertexAttributes, int vertexStride,
 		RenderPipeline vanillaPipeline, boolean shadowPass, GpuBuffer zeroVertexBuffer, List<VertexFormat> vertexFormats) {
 		this(framebuffer, blendModes, vertexAttributes, vertexStride, vanillaPipeline, shadowPass, zeroVertexBuffer, vertexFormats, null);
@@ -88,6 +95,10 @@ public record PipelineState(FramebufferDescription framebuffer, List<BlendMode> 
 
 	public DepthStencilState depthState() {
 		return depthState(this.vanillaPipeline, this.depthFormat() != null, this.shadowPass);
+	}
+
+	public boolean cull() {
+		return !this.scenePass && cull(this.vanillaPipeline, this.shadowPass);
 	}
 
 	public record Attribute(int location, int binding, GpuFormat format, int offset, String name) {

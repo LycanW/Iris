@@ -19,6 +19,7 @@ import net.irisshaders.iris.backend.PipelineState;
 import net.irisshaders.iris.gl.blending.AlphaTest;
 import net.irisshaders.iris.gl.blending.BlendMode;
 import net.irisshaders.iris.gl.blending.BlendModeOverride;
+import net.irisshaders.iris.gl.framebuffer.ViewportData;
 import net.irisshaders.iris.gl.sampler.GlSampler;
 import net.irisshaders.iris.gl.sampler.SamplerHolder.TextureBinding;
 import net.irisshaders.iris.gl.state.ShaderAttributeInputs;
@@ -165,6 +166,10 @@ public class ExtendedShader implements AutoCloseable {
 
 	public String getName() {
 		return this.name;
+	}
+
+	public ViewportData getViewportScale() {
+		return this.directives.getViewportScale();
 	}
 
 	public boolean isClosed() {
@@ -322,7 +327,7 @@ public class ExtendedShader implements AutoCloseable {
 		return prepared.shader().createPipeline(
 			new PipelineState(new FramebufferDescription(targets, depthFormat), blends,
 				attributes, 0, vanilla, phase == WorldRenderTargets.Phase.SHADOW, needsFallback ? this.zeroVertices : null, formats,
-				GraphicsBackend.isOpenGL() ? outputs.outputLocations() : null), background);
+				GraphicsBackend.isOpenGL() ? outputs.outputLocations() : null, phase == WorldRenderTargets.Phase.SCENE), background);
 	}
 
 	private BlendMode blend(RenderPipeline vanilla) {

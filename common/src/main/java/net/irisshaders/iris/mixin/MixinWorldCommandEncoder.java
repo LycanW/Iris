@@ -41,8 +41,11 @@ public abstract class MixinWorldCommandEncoder {
 		var phase = iris.getWorldTargetPhase();
 		var framebuffer = iris.getWorldTargets().getFramebuffer(phase);
 		var colors = framebuffer.getColorViews();
-		var depth = phase == WorldRenderTargets.Phase.SHADOW ? framebuffer.getDepthView() : descriptor.depthAttachment() == null ? null : descriptor.depthAttachment()
-			.textureView();
+		var depth = switch (phase) {
+			case SCENE -> null;
+			case SHADOW -> framebuffer.getDepthView();
+			default -> descriptor.depthAttachment() == null ? null : descriptor.depthAttachment().textureView();
+		};
 		var size = colors.isEmpty() ? framebuffer.getDepthView() : colors.getFirst();
 		var area = new RenderPass.RenderArea(0, 0, size.getWidth(0), size.getHeight(0));
 		var builder = RenderPassDescriptor.builder(descriptor.label()).withRenderArea(area);

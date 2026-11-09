@@ -105,6 +105,13 @@ public class WorldRenderPass extends ForwardingRenderPass {
 			this.commands.setAttachments(colors, this.depth, this.area);
 			this.attachmentPlan = next;
 		}
+
+		if (this.phase == WorldRenderTargets.Phase.SCENE) {
+			var viewport = override.shader().getViewportScale();
+			this.commands.setViewport((int) (viewport.viewportX() * this.area.width()),
+				(int) (viewport.viewportY() * this.area.height()), (int) (this.area.width() * viewport.scale()),
+				(int) (this.area.height() * viewport.scale()));
+		}
 	}
 
 	// neoforge only

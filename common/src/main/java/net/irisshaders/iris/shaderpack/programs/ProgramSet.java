@@ -31,6 +31,7 @@ public class ProgramSet implements ProgramSetInterface {
 	private final PackDirectives packDirectives;
 
 	private final ComputeSource[] shadowCompute;
+	private final ComputeSource[] sceneCompute;
 	private final ComputeSource[] finalCompute;
 
 	private final ComputeSource[] setup;
@@ -57,12 +58,17 @@ public class ProgramSet implements ProgramSetInterface {
 		// - https://github.com/IrisShaders/Iris/issues/483
 		// - https://github.com/IrisShaders/Iris/issues/987
 		boolean readTesselation = pack.hasFeature(FeatureFlags.TESSELLATION_SHADERS);
+		boolean readScene = pack.hasFeature(FeatureFlags.SCENE_PASS);
 
 		this.shadowCompute = readComputeArray(directory, sourceProvider, "shadow", shaderProperties);
+		this.sceneCompute = readScene ? readComputeArray(directory, sourceProvider, "scene", shaderProperties) : new ComputeSource[0];
 		this.setup = readProgramArray(directory, sourceProvider, "setup", shaderProperties);
 
 		try (ExecutorService service = Executors.newFixedThreadPool(10)) {
 			for (ProgramArrayId id : ProgramArrayId.values()) {
+				if (id == ProgramArrayId.SceneComposite && !readScene) {
+					continue;
+				}
 				ProgramSource[] sources = readProgramArray(directory, sourceProvider, id.getSourcePrefix(), shaderProperties,
 					readTesselation);
 				compositePrograms.put(id, sources);
@@ -80,13 +86,18 @@ public class ProgramSet implements ProgramSetInterface {
 			Future[] sources = new Future[ProgramId.values().length];
 
 			for (ProgramId programId : ProgramId.values()) {
+				if (programId == ProgramId.Scene && !readScene) {
+					continue;
+				}
 				sources[programId.ordinal()] = service.submit(
 					() -> readProgramSource(directory, sourceProvider, programId.getSourceName(), this, shaderProperties,
 						programId.getBlendModeOverride(), readTesselation));
 			}
 
 			for (ProgramId id : ProgramId.values()) {
-				gbufferPrograms.put(id, (ProgramSource) sources[id.ordinal()].get());
+				if (sources[id.ordinal()] != null) {
+					gbufferPrograms.put(id, (ProgramSource) sources[id.ordinal()].get());
+				}
 			}
 		} catch (ExecutionException | InterruptedException e) {
 			throw new RuntimeException(e);
@@ -216,6 +227,7 @@ public class ProgramSet implements ProgramSetInterface {
 
 		programs.addAll(Arrays.asList(getComposite(ProgramArrayId.ShadowComposite)));
 		programs.addAll(Arrays.asList(getComposite(ProgramArrayId.Begin)));
+		programs.addAll(Arrays.asList(getComposite(ProgramArrayId.SceneComposite)));
 		programs.addAll(Arrays.asList(getComposite(ProgramArrayId.Prepare)));
 
 		for (ComputeSource[][] sources : computePrograms.values()) {
@@ -237,6 +249,7 @@ public class ProgramSet implements ProgramSetInterface {
 
 		Collections.addAll(computes, finalCompute);
 		Collections.addAll(computes, shadowCompute);
+		Collections.addAll(computes, sceneCompute);
 
 		for (ComputeSource source : computes) {
 			if (source != null) {
@@ -287,6 +300,10 @@ public class ProgramSet implements ProgramSetInterface {
 
 	public ComputeSource[] getShadowCompute() {
 		return shadowCompute;
+	}
+
+	public ComputeSource[] getSceneCompute() {
+		return sceneCompute;
 	}
 
 	public ComputeSource[] getFinalCompute() {

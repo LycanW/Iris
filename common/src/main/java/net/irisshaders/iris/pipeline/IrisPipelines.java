@@ -267,12 +267,16 @@ public class IrisPipelines {
 
 	@Nullable
 	public static ShaderKey getPipeline(IrisRenderingPipeline pipeline, RenderPipeline shader) {
-		return getPipeline(pipeline, shader, ShadowRenderingState.areShadowsCurrentlyBeingRendered()
+		return getPipeline(pipeline, shader, SceneRenderingState.isRendering() ? WorldRenderTargets.Phase.SCENE : ShadowRenderingState.areShadowsCurrentlyBeingRendered()
 			? WorldRenderTargets.Phase.SHADOW : WorldRenderTargets.Phase.OPAQUE);
 	}
 
 	@Nullable
 	public static ShaderKey getPipeline(IrisRenderingPipeline pipeline, RenderPipeline shader, WorldRenderTargets.Phase phase) {
+		if (phase == WorldRenderTargets.Phase.SCENE) {
+			return shader.getLocation().getNamespace().contains("sodium") ? ShaderKey.SCENE_SODIUM_TERRAIN : null;
+		}
+
 		boolean shadow = phase == WorldRenderTargets.Phase.SHADOW;
 		if (shader.getLocation().getNamespace().contains("sodium")) {
 			return sodiumPipeline(shader, shadow);
@@ -307,6 +311,7 @@ public class IrisPipelines {
 		for (var draw : sodiumPipelines.keySet().toArray(RenderPipeline[]::new)) {
 			consumer.accept(draw, sodiumPipeline(draw, false));
 			consumer.accept(draw, sodiumPipeline(draw, true));
+			consumer.accept(draw, ShaderKey.SCENE_SODIUM_TERRAIN);
 		}
 	}
 
